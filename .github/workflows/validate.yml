@@ -1,0 +1,21 @@
+name: validate
+
+# Lints the committed OpenAPI spec so a malformed change is caught in CI.
+on:
+  push:
+    branches: [main]
+    paths: ['openapi.json', 'build_spec.py']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Lint OpenAPI spec
+        run: npx --yes @redocly/cli@latest lint openapi.json
