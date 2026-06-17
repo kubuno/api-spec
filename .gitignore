@@ -1,0 +1,6 @@
+# Build intermediate (re-fetched by generate.sh)
+openapi.core.json
+
+# openapi-generator npm wrapper
+node_modules/
+openapitools.json
