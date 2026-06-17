@@ -1,0 +1,1154 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Kubuno Mobile API",
+    "description": "API surface consumed by the Kubuno native mobile apps (iOS/Android): native auth, drive delta-sync, files/folders and push notifications. Core auth/me paths are generated from the server; drive and push paths are documented from their handlers.",
+    "contact": {
+      "name": "Kubuno Contributors"
+    },
+    "license": {
+      "name": "AGPL-3.0-or-later",
+      "identifier": "AGPL-3.0-or-later"
+    },
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/v1/auth/login": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "login",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Authentifié. Pour client_type 'native'/'desktop' le corps est un NativeTokenResponse ; sinon LoginResponse + cookie HttpOnly refresh_token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NativeTokenResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Identifiants invalides"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/logout": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "logout",
+        "requestBody": {
+          "description": "Optionnel — clients natifs. Le web envoie le refresh via cookie.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Session révoquée"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/refresh": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "refresh",
+        "requestBody": {
+          "description": "Optionnel — clients natifs. Le web envoie le refresh via cookie.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Nouveau couple (natif, avec rotation) ou nouvel access_token (web)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NativeTokenResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Refresh invalide, expiré ou réutilisé"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/register": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "register",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateUserDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Compte créé"
+          },
+          "403": {
+            "description": "Inscription fermée"
+          },
+          "409": {
+            "description": "Email ou nom d'utilisateur déjà pris"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/totp": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "totp_verify",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TotpVerifyDto"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "2FA validée, session émise",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NativeTokenResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Session TOTP invalide"
+          },
+          "422": {
+            "description": "Code incorrect"
+          }
+        }
+      }
+    },
+    "/api/v1/me": {
+      "get": {
+        "tags": [
+          "me"
+        ],
+        "operationId": "get_me",
+        "responses": {
+          "200": {
+            "description": "Profil de l'utilisateur courant",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Non authentifié"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/me/sessions": {
+      "get": {
+        "tags": [
+          "me"
+        ],
+        "operationId": "list_sessions",
+        "responses": {
+          "200": {
+            "description": "Sessions actives (refresh tokens) de l'utilisateur, avec client_type",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RefreshToken"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Non authentifié"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/modules": {
+      "get": {
+        "tags": [
+          "modules"
+        ],
+        "operationId": "list_modules",
+        "responses": {
+          "200": {
+            "description": "Modules actifs et leurs routes/points d'entrée (public, sert la découverte des clients)"
+          }
+        }
+      }
+    },
+    "/api/v1/me/push/devices": {
+      "post": {
+        "tags": [
+          "push"
+        ],
+        "summary": "Register (or refresh) a push device.",
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterDeviceDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Registered (returns the device id)."
+          },
+          "422": {
+            "description": "Invalid provider/token."
+          }
+        }
+      }
+    },
+    "/api/v1/me/push/devices/{id}": {
+      "delete": {
+        "tags": [
+          "push"
+        ],
+        "summary": "Unregister a push device.",
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Removed."
+          },
+          "404": {
+            "description": "Unknown device."
+          }
+        }
+      }
+    },
+    "/api/v1/me/push/preferences": {
+      "get": {
+        "tags": [
+          "push"
+        ],
+        "summary": "List push opt-out preferences.",
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Preferences list."
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "push"
+        ],
+        "summary": "Upsert one push preference.",
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetPreferenceDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Saved."
+          }
+        }
+      }
+    },
+    "/api/v1/drive/sync/delta": {
+      "get": {
+        "tags": [
+          "drive-sync"
+        ],
+        "summary": "Changes since a cursor (delta sync).",
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "default": 0
+            },
+            "description": "Last change_seq seen (0 = full snapshot)."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 500
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Delta page.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriveDelta"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/drive/sync/file/{id}/content": {
+      "put": {
+        "tags": [
+          "drive-sync"
+        ],
+        "summary": "Replace a file's content (conflict-safe).",
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Expected etag; mismatch returns 412 (conflict)."
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Stable key so a replayed mutation is not applied twice."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated (returns new etag)."
+          },
+          "412": {
+            "description": "Conflict: server content changed."
+          }
+        }
+      }
+    },
+    "/api/v1/drive/upload": {
+      "post": {
+        "tags": [
+          "drive"
+        ],
+        "summary": "Upload a new file (multipart).",
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Stable key so a replayed mutation is not applied twice."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "folder_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "file"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Created file."
+          }
+        }
+      }
+    },
+    "/api/v1/drive/folders": {
+      "post": {
+        "tags": [
+          "drive"
+        ],
+        "summary": "Create a folder.",
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Stable key so a replayed mutation is not applied twice."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateFolderDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Created folder.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "folder": {
+                      "$ref": "#/components/schemas/DriveFolder"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/drive/{id}/download": {
+      "get": {
+        "tags": [
+          "drive"
+        ],
+        "summary": "Download a file's content.",
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "File bytes.",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/drive/{id}/trash": {
+      "post": {
+        "tags": [
+          "drive"
+        ],
+        "summary": "Move a file to trash.",
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Stable key so a replayed mutation is not applied twice."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Trashed."
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "CreateUserDto": {
+        "type": "object",
+        "required": [
+          "email",
+          "username",
+          "password"
+        ],
+        "properties": {
+          "display_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "email": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          }
+        }
+      },
+      "LoginDto": {
+        "type": "object",
+        "required": [
+          "login",
+          "password"
+        ],
+        "properties": {
+          "client_type": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "'web' (default) keeps the HttpOnly cookie. 'native'/'desktop' receive the\nrefresh token in the JSON body (no cookie) so non-browser clients can\nstore it in the OS keychain and refresh without a cookie jar."
+          },
+          "device_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "device_type": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "login": {
+            "type": "string",
+            "description": "Email ou nom d'utilisateur."
+          },
+          "password": {
+            "type": "string"
+          }
+        }
+      },
+      "LoginResponse": {
+        "type": "object",
+        "required": [
+          "access_token",
+          "user"
+        ],
+        "properties": {
+          "access_token": {
+            "type": "string"
+          },
+          "user": {
+            "$ref": "#/components/schemas/User"
+          }
+        }
+      },
+      "NativeTokenResponse": {
+        "type": "object",
+        "description": "Token response for native/desktop clients. The raw refresh token is returned\nin the body (never logged) and rotated on every `/auth/refresh`.\n\n`Debug` is intentionally NOT derived: the refresh token must never reach the\nlogs through a stray `{:?}`.",
+        "required": [
+          "access_token",
+          "refresh_token",
+          "refresh_expires_at",
+          "user"
+        ],
+        "properties": {
+          "access_token": {
+            "type": "string"
+          },
+          "refresh_expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "refresh_token": {
+            "type": "string"
+          },
+          "user": {
+            "$ref": "#/components/schemas/User"
+          }
+        }
+      },
+      "RefreshRequest": {
+        "type": "object",
+        "description": "Corps optionnel pour les clients natifs : le refresh token est transmis en\nJSON (les navigateurs continuent d'utiliser le cookie HttpOnly).",
+        "required": [
+          "refresh_token"
+        ],
+        "properties": {
+          "refresh_token": {
+            "type": "string"
+          }
+        }
+      },
+      "RefreshToken": {
+        "type": "object",
+        "required": [
+          "id",
+          "user_id",
+          "expires_at",
+          "created_at",
+          "last_used_at"
+        ],
+        "properties": {
+          "client_type": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "How the session was opened: 'web' | 'native' | 'desktop' | 'api'."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "device_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "device_type": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "family_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Root of the rotation chain (all refresh tokens issued from one device login)."
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "ip_address": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "last_used_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "revoke_reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "revoked_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "user_agent": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "user_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "TotpVerifyDto": {
+        "type": "object",
+        "required": [
+          "code",
+          "totp_session"
+        ],
+        "properties": {
+          "client_type": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Idem qu'au login : 'native'/'desktop' reçoivent le refresh en JSON."
+          },
+          "code": {
+            "type": "string"
+          },
+          "totp_session": {
+            "type": "string"
+          }
+        }
+      },
+      "User": {
+        "type": "object",
+        "required": [
+          "id",
+          "email",
+          "username",
+          "role",
+          "quota_bytes",
+          "used_bytes",
+          "is_active",
+          "email_verified",
+          "preferences",
+          "created_at",
+          "updated_at",
+          "totp_enabled"
+        ],
+        "properties": {
+          "avatar_url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "display_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "email": {
+            "type": "string"
+          },
+          "email_verified": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "is_active": {
+            "type": "boolean"
+          },
+          "last_login_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "oauth_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "oauth_provider": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "preferences": {},
+          "quota_bytes": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "role": {
+            "type": "string"
+          },
+          "totp_enabled": {
+            "type": "boolean"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "used_bytes": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "username": {
+            "type": "string"
+          }
+        }
+      },
+      "DriveChange": {
+        "type": "object",
+        "description": "One change in the drive delta. `kind` discriminates the shape.",
+        "required": [
+          "kind",
+          "change_seq"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "file",
+              "folder",
+              "deleted"
+            ]
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "folder_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "parent_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "path": {
+            "type": "string",
+            "description": "Materialized folder path (folders)."
+          },
+          "etag": {
+            "type": "string",
+            "nullable": true,
+            "description": "Content hash (files)."
+          },
+          "size": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "mime_type": {
+            "type": "string"
+          },
+          "trashed": {
+            "type": "boolean"
+          },
+          "target": {
+            "type": "string",
+            "enum": [
+              "file",
+              "folder"
+            ],
+            "description": "Deleted item kind."
+          },
+          "deleted_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "change_seq": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "DriveDelta": {
+        "type": "object",
+        "required": [
+          "changes",
+          "cursor",
+          "has_more"
+        ],
+        "properties": {
+          "changes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DriveChange"
+            }
+          },
+          "cursor": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "has_more": {
+            "type": "boolean"
+          }
+        }
+      },
+      "DriveFolder": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "parent_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "path": {
+            "type": "string"
+          }
+        }
+      },
+      "CreateFolderDto": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "parent_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "RegisterDeviceDto": {
+        "type": "object",
+        "required": [
+          "provider",
+          "device_token"
+        ],
+        "properties": {
+          "provider": {
+            "type": "string",
+            "enum": [
+              "unifiedpush",
+              "apns",
+              "fcm"
+            ]
+          },
+          "device_token": {
+            "type": "string",
+            "description": "Endpoint URL (unifiedpush) or push token."
+          },
+          "app_id": {
+            "type": "string"
+          },
+          "locale": {
+            "type": "string"
+          }
+        }
+      },
+      "SetPreferenceDto": {
+        "type": "object",
+        "required": [
+          "enabled"
+        ],
+        "properties": {
+          "module_id": {
+            "type": "string",
+            "description": "'*' = all modules."
+          },
+          "event_type": {
+            "type": "string",
+            "description": "'*' = all events."
+          },
+          "enabled": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "auth",
+      "description": "Authentification (login/refresh/logout, natif et web)"
+    },
+    {
+      "name": "me",
+      "description": "Profil et sessions de l'utilisateur courant"
+    },
+    {
+      "name": "modules",
+      "description": "Découverte des modules actifs"
+    },
+    {
+      "name": "drive",
+      "description": "Files & folders"
+    },
+    {
+      "name": "drive-sync",
+      "description": "Delta synchronisation"
+    },
+    {
+      "name": "push",
+      "description": "Push notifications"
+    }
+  ]
+}
