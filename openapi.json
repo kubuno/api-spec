@@ -631,6 +631,225 @@
           }
         }
       }
+    },
+    "/api/v1/mail/changes": {
+      "get": {
+        "tags": [
+          "mail"
+        ],
+        "summary": "Delta sync: threads changed since a cursor.",
+        "description": "Returns every thread with a message whose CONDSTORE modseq is greater than `since` (new messages AND flag changes: read, star, important, snooze, label, move), plus the ids of threads that became entirely deleted/trashed. Keyset-paginated on the max modseq. Scoped to the caller.",
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "since",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "default": 0
+            },
+            "description": "Cursor = modseq of the client's last sync. 0 or absent = full sync."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 200,
+              "maximum": 500
+            },
+            "description": "Page size, default 200, capped at 500."
+          },
+          {
+            "name": "account_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Restrict to one account; absent aggregates all of the user's accounts."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Delta page.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MailDelta"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/mail/messages/{id}/attachments/{index}": {
+      "get": {
+        "tags": [
+          "mail"
+        ],
+        "summary": "Download a message attachment (supports HTTP Range).",
+        "description": "Streams the attachment from disk. Advertises `Accept-Ranges: bytes` and a correct `Content-Length`. A `Range: bytes=start-end` request yields `206 Partial Content` with `Content-Range`; a well-formed but out-of-bounds range yields `416 Range Not Satisfiable` with `Content-Range: bytes */total`. Without a Range header the full file is returned with `200`.",
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Message id."
+          },
+          {
+            "name": "index",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Zero-based attachment index within the message."
+          },
+          {
+            "name": "Range",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Optional byte range, e.g. `bytes=0-99`, `bytes=100-`, or the suffix form `bytes=-500`."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Full attachment bytes.",
+            "headers": {
+              "Accept-Ranges": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Content-Length": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "206": {
+            "description": "Partial content for the requested range.",
+            "headers": {
+              "Content-Range": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Content-Length": {
+                "schema": {
+                  "type": "integer"
+                }
+              },
+              "Accept-Ranges": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "416": {
+            "description": "Requested range not satisfiable.",
+            "headers": {
+              "Content-Range": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/mail/send": {
+      "post": {
+        "tags": [
+          "mail"
+        ],
+        "summary": "Send a message (idempotent with Idempotency-Key).",
+        "description": "Sends (or schedules) a message. An optional `Idempotency-Key` header deduplicates retried sends per user: the first request sends and memorises its response; a repeat with the same key replays that response without sending again (24 h window). Omitting the header keeps the historical behaviour.",
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            },
+            "description": "Opaque per-send key (e.g. a UUID). Same key + same user = at most one delivery."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendMailDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sent, scheduled, or a replayed idempotent response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SendMailResult"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A send with this Idempotency-Key is already in flight."
+          },
+          "422": {
+            "description": "Validation error (no recipient, empty subject)."
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1116,6 +1335,182 @@
             "type": "boolean"
           }
         }
+      },
+      "MailDelta": {
+        "type": "object",
+        "required": [
+          "threads",
+          "deleted_ids",
+          "cursor",
+          "has_more"
+        ],
+        "properties": {
+          "threads": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MailThread"
+            },
+            "description": "Threads changed since `since`, in ascending modseq order. Same enriched shape as GET /threads."
+          },
+          "deleted_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Threads that became entirely deleted/trashed since `since`."
+          },
+          "cursor": {
+            "type": "string",
+            "description": "Largest modseq covered by this page (as a string). Pass back as `since`. Unchanged on an empty page."
+          },
+          "has_more": {
+            "type": "boolean",
+            "description": "True when the page hit `limit`; call again with since=cursor."
+          }
+        }
+      },
+      "MailThread": {
+        "type": "object",
+        "description": "An enriched conversation. Carries the thread columns plus labels, folders, category, list_unsubscribe and attachment chips. Loosely typed: the client stores what it needs.",
+        "additionalProperties": true,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "account_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "unread_count": {
+            "type": "integer"
+          },
+          "is_starred": {
+            "type": "boolean"
+          },
+          "is_important": {
+            "type": "boolean"
+          },
+          "last_message_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "labels": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "folders": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        }
+      },
+      "SendMailDto": {
+        "type": "object",
+        "required": [
+          "account_id",
+          "to_addresses",
+          "subject",
+          "body_html"
+        ],
+        "properties": {
+          "account_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "to_addresses": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EmailAddress"
+            }
+          },
+          "cc_addresses": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EmailAddress"
+            }
+          },
+          "bcc_addresses": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EmailAddress"
+            }
+          },
+          "subject": {
+            "type": "string"
+          },
+          "body_html": {
+            "type": "string"
+          },
+          "reply_to_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "draft_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "scheduled_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When set, the message is scheduled instead of sent immediately."
+          },
+          "sign": {
+            "type": "boolean"
+          },
+          "encrypt": {
+            "type": "boolean"
+          },
+          "label_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        }
+      },
+      "EmailAddress": {
+        "type": "object",
+        "required": [
+          "email"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "email": {
+            "type": "string"
+          }
+        }
+      },
+      "SendMailResult": {
+        "type": "object",
+        "description": "The `message` field is 'Message envoyé' for an immediate send or 'Envoi programmé' (with `scheduled_at`) for a scheduled one. A replayed idempotent response is identical to the first.",
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "scheduled_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
       }
     },
     "securitySchemes": {
@@ -1149,6 +1544,10 @@
     {
       "name": "push",
       "description": "Push notifications"
+    },
+    {
+      "name": "mail",
+      "description": "Mail module: delta sync, attachment download with HTTP Range, and idempotent send. Consumed by the native mail client."
     }
   ]
 }
