@@ -4,3 +4,8 @@ openapi.core.json
 # openapi-generator npm wrapper
 node_modules/
 openapitools.json
+
+# Claude Code working files (agent instructions & memory) — never published
+CLAUDE.md
+AGENTS.md
+.claude/
