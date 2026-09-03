@@ -1,3 +1,7 @@
+<p align="center">
+  <img src=".github/logo.svg" alt="Kubuno API spec logo" width="128" height="128">
+</p>
+
 # Kubuno API spec & generated clients
 
 The OpenAPI 3.1 description of the Kubuno API surface used by the **native
