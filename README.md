@@ -1,8 +1,24 @@
-<p align="center">
-  <img src=".github/logo.svg" alt="Kubuno API spec logo" width="128" height="128">
-</p>
+<!--
+  SPDX-FileCopyrightText: 2026 Kubuno contributors
+  SPDX-License-Identifier: AGPL-3.0-or-later
+-->
 
-# Kubuno API spec & generated clients
+<div align="center">
+
+<img src=".github/logo.svg" alt="Kubuno API spec logo" width="120">
+
+# Kubuno — API spec
+
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
+![OpenAPI](https://img.shields.io/badge/OpenAPI-3.1-6BA539.svg)
+![Swift](https://img.shields.io/badge/client-Swift-F05138.svg)
+![Kotlin](https://img.shields.io/badge/client-Kotlin-7F52FF.svg)
+
+**The OpenAPI description and generated clients for the native apps of [Kubuno](https://github.com/kubuno/core) — the self-hosted, libre (AGPLv3) cloud platform, a sovereign alternative to Google Workspace and Microsoft 365.**
+
+</div>
+
+---
 
 The OpenAPI 3.1 description of the Kubuno API surface used by the **native
 mobile apps** (iOS / Android), plus the generated typed clients.
@@ -54,7 +70,19 @@ let delta = try await DriveSyncAPI.apiV1DriveSyncDeltaGet(cursor: 0)
 > the offline-first sync logic (conflict detection, safe replay) is first-class
 > in the clients.
 
+## Continuous integration
+
+`.github/workflows/validate.yml` lints the spec (Redocly) on every push and pull request.
+
 ## Note
 
 `clients/` is generated code — regenerate it with `generate.sh` rather than
 editing by hand.
+
+## Security
+
+Please report vulnerabilities privately — see [`SECURITY.md`](SECURITY.md).
+
+## License
+
+[AGPL-3.0-or-later](LICENSE) © Kubuno contributors.
